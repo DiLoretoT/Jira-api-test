@@ -1,2 +1,5 @@
-pandas
 requests
+sqlite3
+sqlalchemy
+pandas as pd
+pytz
