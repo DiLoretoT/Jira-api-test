@@ -32,11 +32,11 @@ def df_accounts(endpoint):
             
             try:
                 # Selecting columns
-                selected_columns = ['id', 'key',  'name', 'status', 'lead.displayName', 'category.name', 'customer.name']
+                selected_columns = ['id', 'key',  'name', 'status', 'lead.displayName', 'category.id', 'customer.name']
                 df = df[selected_columns]
                 rename_columns = {
                     'lead.displayName': 'lead',
-                    'category.name': 'category',
+                    'category.id': 'categoryId',
                     'customer.name': 'customer'
                 }
                 # Rename columns 
@@ -77,7 +77,7 @@ def setup_database():
         key = Column(String)
         name = Column(String)
         status = Column(String)
-        category = Column(String)
+        categoryId = Column(Integer)
         customer = Column(String)
         lead = Column(String)
        
