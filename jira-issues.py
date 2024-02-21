@@ -38,7 +38,7 @@ ninety_days_ago_formatted = ninety_days_ago.strftime('%Y-%m-%d')
 jql_query = f"created >= '{ninety_days_ago_formatted}'"
 endpoint = 'search'
 
-jql_query = f"created >= '{ninety_days_ago_formatted}'"
+jql_query = f"created >= '{ninety_days_ago_formatted}' AND project = GP"
 
 headers = {
     'Authorization': f'Basic {encoded_credentials}'
@@ -60,31 +60,39 @@ params = {
 # Getting and preparing dataframe
 def df_issues(endpoint):
     api_url = f'https://algeiba.atlassian.net/rest/api/3/{endpoint}'
-    response = requests.get(api_url, headers=headers, params=params)
-    print(f'Status code: {response.status_code}')
     
-    # Check for a successful response
-    if response.status_code == 200:
-        # Parse the JSON response
-        data = response.json()
-        df = pd.DataFrame(data)
-        print(df.columns)
+    all_issues = []
+
+    start_at = 0
+    max_results = 50
+    total = None
+
+    while total is None or start_at < total:
+        params['startAt'] = start_at
+        response = requests.get(api_url, headers=headers, params=params)
+        print(print(f'Status code: {response.status_code}'))
+
+        if response.status_code == 200:
+            # Parse the JSON response
+            data = response.json()
+            all_issues.extend(data['issues'])
+            
+            start_at += max_results
+            total = data['total']
+
+        else:
+            print(f"Failed to fetch issues: {response.status_code}")
+            return pd.DataFrame()  # Return an empty DataFrame if there's an error
         
         # Normalize the JSON response to convert to a dataframe
-        df_issues = pd.json_normalize(
-            data['issues'],
-            record_path=None,
-            meta=[
-                'id', 'key', 'summary', ['fields', 'assignee', 'accountId'], ['fields', 'status', 'description'],
-            ['fields', 'customfield_10051', 'id'], ['fields', 'creator', 'accountId'],
-            ['fields', 'reporter', 'accountId'], ['fields', 'issuetype', 'name'],
-            ['fields', 'project', 'id'], ['fields', 'resolutiondate'],
-            ['fields', 'created'],
-            # Add paths to custom fields here, for example ['fields', 'customfield_10101']
-            ],       
-        )
         
+        df_issues = pd.json_normalize(all_issues, errors='ignore')
+        print("Columns BEFORE renaming: ", df_issues.columns)
 
+        for custom_field in ['fields.customfield_10051.value', 'fields.customfield_10099.value', 'fields.customfield_10100.value', 'fields.customfield_10167.value','fields.customfield_10217.value']:
+            if custom_field not in df_issues.columns:
+                df_issues[custom_field] = None # Create the column with None values
+              
         # Rename the columns for better readability
         df_issues.rename(columns={
             'fields.assignee.accountId': 'assigneeId',
@@ -99,19 +107,22 @@ def df_issues(endpoint):
             'fields.summary': 'summary',
             'fields.customfield_10167.value': 'Scania Activity Type',
             'fields.customfield_10217.value': 'RZBT Activity Type',
+            'fields.customfield_10100.value': 'GHZ Organization',
+            'fields.customfield_10099.value': 'GP Organization',
+            
                         
             # Add more renames for custom fields as needed
         }, inplace=True)
                 
         print("Columns after process and rename: ", df_issues.columns)
 
-        selected_columns = ['id', 'key', 'summary', 'issueType', 'createdDate', 'resolutionDate', 'projectId', 'reporterId', 'assigneeId', 'statusDescription', 'Scania Activity Type', 'RZBT Activity Type']
+        selected_columns = ['id', 'key', 'summary', 'issueType', 'createdDate', 'resolutionDate', 'projectId', 'reporterId', 'assigneeId', 'statusDescription', 'GHZ Organization','GP Organization', 'Scania Activity Type', 'RZBT Activity Type']
 
-        df_issues = df_issues[selected_columns]
+        df_selected = df_issues[selected_columns]
 
-        print("Columns after filter: ", df_issues.columns)
+        print("Columns after filter: ", df_selected.columns)
 
-        return df_issues
+        return df_selected
     
     else:
         print(f"Failed to fetch issues: {response.status_code}")
@@ -122,26 +133,25 @@ issues_df = df_issues(endpoint)
 print(issues_df)
 
 # Connect to the SQLite database
-#def setup_database():
-#    # Connection
-#    engine = create_engine('sqlite:///jiradatabase.db')
-#    Base = declarative_base()
-#    
-#    # Define the issues table
-#    class User(Base):
-#        __tablename__ = 'issues'
-#        accountId = Column(Integer, primary_key=True)
-#        active = Column(String)
-#        displayName = Column(String)
+def setup_database():
+    # Connection
+    engine = create_engine('sqlite:///jiradatabase.db')
+    Base = declarative_base()
+    
+    # Define the issues table
+    class User(Base):
+        __tablename__ = 'issues'
+        accountId = Column(Integer, primary_key=True)
+        active = Column(String)
+        displayName = Column(String)
+    Base.metadata.create_all(engine)
+    return engine
 
-#    Base.metadata.create_all(engine)
-#    return engine
+engine = setup_database()
 
-#engine = setup_database()
+table_name = "issues"
 
-#table_name = "issues"
-
-#issues_df.to_sql(name='issues', con=engine, if_exists='replace', index=False)
+issues_df.to_sql(name='issues', con=engine, if_exists='replace', index=False)
 
 # DEBUG PRINT
-#print(f"The DataFrame was successfully loaded into the table '{table_name}'.")
+print(f"The DataFrame was successfully loaded into the table '{table_name}'.")
