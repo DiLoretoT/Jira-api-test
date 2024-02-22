@@ -18,7 +18,7 @@ headers = {
 params = {
     'from': '2024-02-01',
     'to': '2024-02-02',
-    'limit': 5,
+    'limit': 100,
 }
 
 # Getting and preparing dataframe
@@ -87,33 +87,32 @@ worklogs_df.rename(columns={'billableSeconds': 'billedHours'}, inplace=True)
 print(worklogs_df)
 
 # Connect to the SQLite database
-#def setup_database():
-#    # Connection
-#    engine = create_engine('sqlite:///jiradatabase.db')
-#    Base = declarative_base()
-#    
-#    # Define the worklogs table
-#    class Worklogs(Base):
-#        __tablename__ = 'worklogs'
-#        tempoWorklogId = Column(Integer, primary_key=True)
-#        issueId = Column(String(40))
-#        userAccountId = Column(String(50))
-#        hours = Column(Integer)
-#        billedHours = Column(Integer)
-#        startDate = Column(DateTime)
-#        startTime = Column(DateTime)
-#        description = Column(Text)
-#        createdAt = Column(DateTime)
-#        updatedAt = Column(DateTime)
-#        
-#    Base.metadata.create_all(engine)
-#    return engine
+def setup_database():
+    # Connection
+    engine = create_engine('sqlite:///jiradatabase.db')
+    Base = declarative_base()
+    
+    # Define the worklogs table
+    class Worklogs(Base):
+        __tablename__ = 'worklogs'
+        tempoWorklogId = Column(Integer, primary_key=True)
+        issueId = Column(String(40))
+        userAccountId = Column(String(50))
+        hours = Column(Integer)
+        billedHours = Column(Integer)
+        startDate = Column(DateTime)
+        startTime = Column(DateTime)
+        description = Column(Text)
+        createdAt = Column(DateTime)
+        updatedAt = Column(DateTime)
+        
+    Base.metadata.create_all(engine)
+    return engine
+engine = setup_database()
 
-#engine = setup_database()
+table_name = "worklogs"
 
-#table_name = "worklogs"
+worklogs_df.to_sql(name='worklogs', con=engine, if_exists='replace', index=False)
 
-#worklogs_df.to_sql(name='worklogs', con=engine, if_exists='replace', index=False)
-
-## DEBUG PRINT
-#print(f"The DataFrame was successfully loaded into the table '{table_name}'.")
+# DEBUG PRINT
+print(f"The DataFrame was successfully loaded into the table '{table_name}'.")

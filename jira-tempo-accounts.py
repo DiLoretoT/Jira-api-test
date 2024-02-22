@@ -32,12 +32,12 @@ def df_accounts(endpoint):
             
             try:
                 # Selecting columns
-                selected_columns = ['id', 'key',  'name', 'status', 'lead.displayName', 'category.id', 'customer.name']
+                selected_columns = ['id', 'key',  'name', 'status', 'lead.accountId', 'category.id', 'customer.name']
                 df = df[selected_columns]
                 rename_columns = {
-                    'lead.displayName': 'lead',
+                    'lead.accountId': 'leadId',
                     'category.id': 'categoryId',
-                    'customer.name': 'customer'
+                    'customer.id': 'customerId'
                 }
                 # Rename columns 
                 df = df.rename(columns=rename_columns)
@@ -78,8 +78,8 @@ def setup_database():
         name = Column(String)
         status = Column(String)
         categoryId = Column(Integer)
-        customer = Column(String)
-        lead = Column(String)
+        customerId = Column(String)
+        leadId = Column(String)
        
         
     Base.metadata.create_all(engine)

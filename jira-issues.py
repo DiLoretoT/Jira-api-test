@@ -38,7 +38,7 @@ ninety_days_ago_formatted = ninety_days_ago.strftime('%Y-%m-%d')
 jql_query = f"created >= '{ninety_days_ago_formatted}'"
 endpoint = 'search'
 
-jql_query = f"created >= '{ninety_days_ago_formatted}' AND project = GP"
+jql_query = f"created >= '{ninety_days_ago_formatted}' AND project = Gilera"
 
 headers = {
     'Authorization': f'Basic {encoded_credentials}'
@@ -49,7 +49,7 @@ params = {
     'fields': ','.join([
         'key', 'summary', 'status', 'project', 'assignee', 'created', 'reporter', 'issuetype',
         'customfield_10101', 'customfield_10100', 'customfield_10099', 'customfield_10217',
-        'customfield_10167', 'resolutiondate',
+        'customfield_10167', 'resolutiondate', 'customfield_10105', 'customfield_10104', 'timeestimate', 'customfield_10056', 'customfield_10055'
         # Add more custom fields as needed
     
     ]),
@@ -89,7 +89,8 @@ def df_issues(endpoint):
         df_issues = pd.json_normalize(all_issues, errors='ignore')
         print("Columns BEFORE renaming: ", df_issues.columns)
 
-        for custom_field in ['fields.customfield_10051.value', 'fields.customfield_10099.value', 'fields.customfield_10100.value', 'fields.customfield_10167.value','fields.customfield_10217.value']:
+        for custom_field in ['fields.customfield_10051.value', 'fields.customfield_10099.value', 'fields.customfield_10100.value', 'fields.customfield_10167.value','fields.customfield_10217.value',
+                            'fields.customfield_10105','fields.customfield_10104', 'fields.timeestimate', 'fields.customfield_10056', 'fields.customfield_10055']:
             if custom_field not in df_issues.columns:
                 df_issues[custom_field] = None # Create the column with None values
               
@@ -109,14 +110,21 @@ def df_issues(endpoint):
             'fields.customfield_10217.value': 'RZBT Activity Type',
             'fields.customfield_10100.value': 'GHZ Organization',
             'fields.customfield_10099.value': 'GP Organization',
-            
+            'fields.customfield_10104': '% Invoiced',
+            'fields.customfield_10105': '% Advance',
+            'fields.timeestimate': 'TimeEstimate',
+            'fields.customfield_10055': 'StartDate',
+            'fields.customfield_10056': 'EndDate'
                         
             # Add more renames for custom fields as needed
         }, inplace=True)
+
+        df_issues['TimeEstimate'] = (df_issues['TimeEstimate'] / 3600).round(2)
                 
         print("Columns after process and rename: ", df_issues.columns)
 
-        selected_columns = ['id', 'key', 'summary', 'issueType', 'createdDate', 'resolutionDate', 'projectId', 'reporterId', 'assigneeId', 'statusDescription', 'GHZ Organization','GP Organization', 'Scania Activity Type', 'RZBT Activity Type']
+        selected_columns = ['id', 'key', 'summary', 'issueType', 'createdDate', 'resolutionDate', 'projectId', 'reporterId', 'assigneeId', 'statusDescription', 
+                            'GHZ Organization','GP Organization', 'Scania Activity Type', 'RZBT Activity Type','% Invoiced','% Advance', 'TimeEstimate', 'StartDate', 'EndDate']
 
         df_selected = df_issues[selected_columns]
 
