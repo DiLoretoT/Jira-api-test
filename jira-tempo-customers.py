@@ -14,10 +14,14 @@ headers = {
     'Authorization': f'Bearer {api_token}'
 }
 
+params = {
+    'limit': 200
+}
+
 # Getting and preparing dataframe
 def df_customers(endpoint):
     api_url = f'https://api.tempo.io/core/3/{endpoint}'
-    response = requests.get(api_url, headers=headers)
+    response = requests.get(api_url, headers=headers, params=params)
     print(f'Status code: {response.status_code}')
     
     if response.status_code == 200:

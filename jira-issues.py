@@ -4,7 +4,7 @@ import pandas as pd
 import base64
 from datetime import datetime, timedelta
 from pathlib import Path
-from sqlalchemy import create_engine, Column, Integer, String
+from sqlalchemy import create_engine, Column, Integer, String, DateTime
 from sqlalchemy.orm import declarative_base
 from utils import read_api_credentials
 
@@ -30,15 +30,15 @@ encoded_credentials = base64.b64encode(credentials.encode('utf-8')).decode('utf-
 #    next_year = current_year
 
 # Calculate the date 90 days ago from the current date
-ninety_days_ago = datetime.now() - timedelta(days=180)
+ninety_days_ago = datetime.now() - timedelta(days=40)
 # Format the date in the format Jira expects (yyyy/mm/dd)
 ninety_days_ago_formatted = ninety_days_ago.strftime('%Y-%m-%d')
-
+print(ninety_days_ago_formatted)
 # Construct the JQL query to retrieve issues created in the last 90 days
 jql_query = f"created >= '{ninety_days_ago_formatted}'"
 endpoint = 'search'
 
-jql_query = f"created >= '{ninety_days_ago_formatted}' AND project = Gilera"
+jql_query = f"created >= '{ninety_days_ago_formatted}'"
 
 headers = {
     'Authorization': f'Basic {encoded_credentials}'
@@ -49,11 +49,11 @@ params = {
     'fields': ','.join([
         'key', 'summary', 'status', 'project', 'assignee', 'created', 'reporter', 'issuetype',
         'customfield_10101', 'customfield_10100', 'customfield_10099', 'customfield_10217',
-        'customfield_10167', 'resolutiondate', 'customfield_10105', 'customfield_10104', 'timeestimate', 'customfield_10056', 'customfield_10055'
+        'customfield_10167', 'resolutiondate', 'customfield_10105', 'customfield_10104', 'timeestimate', 'customfield_10056', 'customfield_10055', 'customfield_10051'
         # Add more custom fields as needed
     
     ]),
-    'maxResults': 1000
+    'maxResults': 200
 }
 
 
@@ -64,7 +64,7 @@ def df_issues(endpoint):
     all_issues = []
 
     start_at = 0
-    max_results = 50
+    max_results = 200
     total = None
 
     while total is None or start_at < total:
@@ -83,13 +83,14 @@ def df_issues(endpoint):
         else:
             print(f"Failed to fetch issues: {response.status_code}")
             return pd.DataFrame()  # Return an empty DataFrame if there's an error
-        
+            break
+
         # Normalize the JSON response to convert to a dataframe
         
         df_issues = pd.json_normalize(all_issues, errors='ignore')
         print("Columns BEFORE renaming: ", df_issues.columns)
 
-        for custom_field in ['fields.customfield_10051.value', 'fields.customfield_10099.value', 'fields.customfield_10100.value', 'fields.customfield_10167.value','fields.customfield_10217.value',
+        for custom_field in ['fields.customfield_10051.id', 'fields.customfield_10099.value', 'fields.customfield_10100.value', 'fields.customfield_10167.value','fields.customfield_10217.value',
                             'fields.customfield_10105','fields.customfield_10104', 'fields.timeestimate', 'fields.customfield_10056', 'fields.customfield_10055']:
             if custom_field not in df_issues.columns:
                 df_issues[custom_field] = None # Create the column with None values
@@ -123,18 +124,27 @@ def df_issues(endpoint):
                 
         print("Columns after process and rename: ", df_issues.columns)
 
-        selected_columns = ['id', 'key', 'summary', 'issueType', 'createdDate', 'resolutionDate', 'projectId', 'reporterId', 'assigneeId', 'statusDescription', 
+        selected_columns = ['id', 'key', 'summary', 'issueType', 'createdDate', 'resolutionDate', 'projectId', 'reporterId', 'assigneeId', 'statusDescription', 'accountId',
                             'GHZ Organization','GP Organization', 'Scania Activity Type', 'RZBT Activity Type','% Invoiced','% Advance', 'TimeEstimate', 'StartDate', 'EndDate']
 
         df_selected = df_issues[selected_columns]
 
         print("Columns after filter: ", df_selected.columns)
 
-        return df_selected
+        #return df_selected
     
+    #else:
+    #    print(f"Failed to fetch issues: {response.status_code}")
+    #    return pd.DataFrame()  # Return an empty DataFrame if there's an error
+        
+    if all_issues:
+        df_issues = pd.json_normalize(all_issues, errors='ignore')
+        # The rest of your DataFrame processing code here
+
+        return df_issues
     else:
-        print(f"Failed to fetch issues: {response.status_code}")
-        return pd.DataFrame()  # Return an empty DataFrame if there's an error
+        print("No issues fetched.")
+        return pd.DataFrame()
 
 # Call df_issues function with the parameter endpoint to get issues data from JIRA API.
 issues_df = df_issues(endpoint)
@@ -147,11 +157,29 @@ def setup_database():
     Base = declarative_base()
     
     # Define the issues table
-    class User(Base):
+    class Issues(Base):
         __tablename__ = 'issues'
-        accountId = Column(Integer, primary_key=True)
-        active = Column(String)
-        displayName = Column(String)
+        id = Column(Integer, primary_key=True)        
+        key = Column(String)
+        summary = Column(String)
+        issueType = Column(String)
+        createdDate = Column(DateTime)
+        resolutionDate = Column(DateTime)
+        projectId = Column(Integer)
+        accountId = Column(Integer)
+        reporterId = Column(String)
+        assigneeId = Column(String)
+        statusDescription = Column(String)
+        GHZOrganization = Column(String)
+        GPOrganization = Column(String)
+        ScaniaActivityType = Column(String)
+        RZBTActivityType = Column(String)
+        InvoicedPercent = Column(Integer)
+        AdvancePercent = Column(Integer)
+        TimeEstimate = Column(Integer)
+        StartDate = Column(DateTime)
+        EndDate = Column(DateTime)
+
     Base.metadata.create_all(engine)
     return engine
 

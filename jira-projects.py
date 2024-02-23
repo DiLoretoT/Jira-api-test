@@ -22,23 +22,43 @@ headers = {
     'Authorization': f'Basic {encoded_credentials}'
 }
 
+params = {
+    'maxResults': 50
+}
+
 # Getting and preparing dataframe
 def df_projects(endpoint):
     api_url = f'https://algeiba.atlassian.net/rest/api/3/{endpoint}'
-    response = requests.get(api_url, headers=headers)
-    print(f'Status code: {response.status_code}')
+    all_projects = []  # List to store all projects across pages
+    start_at = 0
+    max_results = 200
+    total = None
+
+    while total is None or start_at < total:
+        response = requests.get(api_url, headers=headers, params={'startAt': start_at, 'maxResults': max_results})
+              
     
-    if response.status_code == 200:
-        data = response.json()
-        df = pd.DataFrame(data['values'])
-        # Create a DataFrame from the values
-        df = df[['id', 'key', 'name']]
-        print("Columns After Normalization:", list(df.columns))
-        return df
+        if response.status_code == 200:
+            
+            data = response.json()
+            all_projects.extend(data['values'])     # Add the projects from the current page to the list
+            start_at += len(data['values'])         # Increment by the number of results returned
+            total = data['total'] if total is None else total
+
+        else:
+            print(f"Failed to fetch projects: {response.status_code}")
+            return pd.DataFrame()  # Return an empty DataFrame if there's an error
+
+            
+            #
+            #return df
     
-    else:
-        print(f"Failed to fetch projects: {response.status_code}")
-        return pd.DataFrame()  # Return an empty DataFrame if there's an error
+    # Create a DataFrame from the combined list of all projects
+    df = pd.DataFrame(all_projects)
+    df = df[['id', 'key', 'name']]
+    print("Columns After Normalization:", list(df.columns))
+    return df
+
 
 # Call df_projects function with the parameter endpoint to get projects data from JIRA API.
 projects_df = df_projects(endpoint)
