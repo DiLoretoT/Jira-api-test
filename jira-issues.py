@@ -38,21 +38,19 @@ print(ninety_days_ago_formatted)
 jql_query = f"created >= '{ninety_days_ago_formatted}'"
 endpoint = 'search'
 
-jql_query = f"created >= '{ninety_days_ago_formatted}'"
-
 headers = {
     'Authorization': f'Basic {encoded_credentials}'
 }
 
+     
+
 params = {
     'jql': jql_query,
     'fields': ','.join([
-        'key', 'summary', 'status', 'project', 'assignee', 'created', 'reporter', 'issuetype',
-        'customfield_10101', 'customfield_10100', 'customfield_10099', 'customfield_10217',
-        'customfield_10167', 'resolutiondate', 'customfield_10105', 'customfield_10104', 'timeestimate', 'customfield_10056', 'customfield_10055', 'customfield_10051'
-        # Add more custom fields as needed
-    
-    ]),
+        'key', 'summary', 'status', 'project', 'assignee', 'created', 'reporter', 'issuetype', 'updated', 'timeestimate'
+        'customfield_10101', 'customfield_10100', 'customfield_10099', 'customfield_10217','customfield_10167', 'resolutiondate',
+        'customfield_10105', 'customfield_10104', 'customfield_10056', 'customfield_10055', 'customfield_10051', 'customfield_10215'
+        ]),
     'maxResults': 200
 }
 
@@ -64,13 +62,14 @@ def df_issues(endpoint):
     all_issues = []
 
     start_at = 0
-    max_results = 200
+    max_results = 100
     total = None
 
+    print("Making API request...")
     while total is None or start_at < total:
         params['startAt'] = start_at
         response = requests.get(api_url, headers=headers, params=params)
-        print(print(f'Status code: {response.status_code}'))
+        print(f'Status code: {response.status_code}')
 
         if response.status_code == 200:
             # Parse the JSON response
@@ -86,15 +85,17 @@ def df_issues(endpoint):
             break
 
         # Normalize the JSON response to convert to a dataframe
-        
+        print("The request to /search endpoint was successfull.")
         df_issues = pd.json_normalize(all_issues, errors='ignore')
-        print("Columns BEFORE renaming: ", df_issues.columns)
+        #print("Columns BEFORE renaming: ", df_issues.columns)
 
-        for custom_field in ['fields.customfield_10051.id', 'fields.customfield_10099.value', 'fields.customfield_10100.value', 'fields.customfield_10167.value','fields.customfield_10217.value',
-                            'fields.customfield_10105','fields.customfield_10104', 'fields.timeestimate', 'fields.customfield_10056', 'fields.customfield_10055']:
+        print("Normalizing custom fields and getting None for issues without them...")
+        for custom_field in ['fields.customfield_10051.id', 'fields.customfield_10099.value', 'fields.customfield_10100.value', 'fields.customfield_10167.value','fields.customfield_10217',
+                            'fields.customfield_10105','fields.customfield_10104', 'fields.timeestimate', 'fields.customfield_10056', 'fields.customfield_10055', 'fields.customfield_10215']:
             if custom_field not in df_issues.columns:
                 df_issues[custom_field] = None # Create the column with None values
-              
+
+        print("Renaming columns...")      
         # Rename the columns for better readability
         df_issues.rename(columns={
             'fields.assignee.accountId': 'assigneeId',
@@ -106,6 +107,7 @@ def df_issues(endpoint):
             'fields.project.id': 'projectId',
             'fields.resolutiondate': 'resolutionDate',
             'fields.created': 'createdDate',
+            'fields.updated': 'updatedDate',
             'fields.summary': 'summary',
             'fields.customfield_10167.value': 'Scania Activity Type',
             'fields.customfield_10217.value': 'RZBT Activity Type',
@@ -115,21 +117,23 @@ def df_issues(endpoint):
             'fields.customfield_10105': '% Advance',
             'fields.timeestimate': 'TimeEstimate',
             'fields.customfield_10055': 'StartDate',
-            'fields.customfield_10056': 'EndDate'
+            'fields.customfield_10056': 'EndDate',
+            'fields.customfield_10215': 'FinalDate'
+            
                         
             # Add more renames for custom fields as needed
         }, inplace=True)
 
         df_issues['TimeEstimate'] = (df_issues['TimeEstimate'] / 3600).round(2)
                 
-        print("Columns after process and rename: ", df_issues.columns)
-
-        selected_columns = ['id', 'key', 'summary', 'issueType', 'createdDate', 'resolutionDate', 'projectId', 'reporterId', 'assigneeId', 'statusDescription', 'accountId',
-                            'GHZ Organization','GP Organization', 'Scania Activity Type', 'RZBT Activity Type','% Invoiced','% Advance', 'TimeEstimate', 'StartDate', 'EndDate']
+        #print("Columns after process and rename: ", df_issues.columns)
+        print("Selecting columns...")
+        selected_columns = ['id', 'key', 'summary', 'issueType', 'createdDate', 'updatedDate', 'resolutionDate', 'projectId', 'reporterId', 'assigneeId', 'statusDescription', 'accountId',
+                            'GHZ Organization','GP Organization', 'Scania Activity Type', 'RZBT Activity Type','% Invoiced','% Advance', 'TimeEstimate', 'StartDate', 'EndDate', 'FinalDate']
 
         df_selected = df_issues[selected_columns]
 
-        print("Columns after filter: ", df_selected.columns)
+        #print("Columns after filter: ", df_selected.columns)
 
         #return df_selected
     
@@ -140,16 +144,21 @@ def df_issues(endpoint):
     if all_issues:
         df_issues = pd.json_normalize(all_issues, errors='ignore')
         # The rest of your DataFrame processing code here
-
-        return df_issues
+    
+        return df_selected
     else:
         print("No issues fetched.")
         return pd.DataFrame()
 
 # Call df_issues function with the parameter endpoint to get issues data from JIRA API.
+print("Getting function up to work...")
 issues_df = df_issues(endpoint)
-print(issues_df)
 
+print("Dataframe right now: ")
+print(issues_df.head())
+
+
+print("Connecting to the database...")
 # Connect to the SQLite database
 def setup_database():
     # Connection
@@ -159,11 +168,12 @@ def setup_database():
     # Define the issues table
     class Issues(Base):
         __tablename__ = 'issues'
-        id = Column(Integer, primary_key=True)        
+        id = Column(String, primary_key=True)        
         key = Column(String)
         summary = Column(String)
         issueType = Column(String)
         createdDate = Column(DateTime)
+        updatedDate = Column(DateTime)
         resolutionDate = Column(DateTime)
         projectId = Column(Integer)
         accountId = Column(Integer)
@@ -179,6 +189,7 @@ def setup_database():
         TimeEstimate = Column(Integer)
         StartDate = Column(DateTime)
         EndDate = Column(DateTime)
+        FinalDate = Column(DateTime)
 
     Base.metadata.create_all(engine)
     return engine
@@ -186,6 +197,8 @@ def setup_database():
 engine = setup_database()
 
 table_name = "issues"
+
+print("Loading info into the database...")
 
 issues_df.to_sql(name='issues', con=engine, if_exists='replace', index=False)
 

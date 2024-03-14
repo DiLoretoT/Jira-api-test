@@ -53,7 +53,7 @@ def setup_database():
     # Define the users table
     class User(Base):
         __tablename__ = 'users'
-        accountId = Column(Integer, primary_key=True)
+        accountId = Column(String, primary_key=True)
         active = Column(String)
         displayName = Column(String)
 

@@ -23,7 +23,7 @@ params = {
 }
 
 # Getting and preparing dataframe
-def df_holidaysScheme1(endpoint1):
+def df_holidaysSchemesMemb1(endpoint1):
     api_url1 = f'https://api.tempo.io/4/{endpoint1}'
     
     response = requests.get(api_url1, headers=headers, params=params)
@@ -38,11 +38,11 @@ def df_holidaysScheme1(endpoint1):
                         
             print("Columns After Normalization:", list(df.columns))
             
-            df['schemaId'] = 1
+            df['schemeId'] = 1
 
             # Define the list of selected columns
             selected_columns = [
-                'schemaId', 'accountId'
+                'schemeId', 'accountId'
             ]
 
             # Select the defined columns
@@ -59,10 +59,10 @@ def df_holidaysScheme1(endpoint1):
         return pd.DataFrame()  # Return an empty DataFrame if there's an error
 
 # Call df_holidaysSchemes function with the parameter endpoint1 to get holidaysSchemes data from JIRA API.
-holidaysScheme1_df = df_holidaysScheme1(endpoint1)
+holidaysSchemesMemb1_df = df_holidaysSchemesMemb1(endpoint1)
 
 # Getting and preparing dataframe
-def df_holidaysScheme3(endpoint3):
+def df_holidaysSchemesMemb3(endpoint3):
     api_url1 = f'https://api.tempo.io/4/{endpoint3}'
     
     response = requests.get(api_url1, headers=headers, params=params)
@@ -77,11 +77,11 @@ def df_holidaysScheme3(endpoint3):
                         
             print("Columns After Normalization:", list(df.columns))
             
-            df['schemaId'] = 3
+            df['schemeId'] = 3
 
             # Define the list of selected columns
             selected_columns = [
-                'schemaId', 'accountId'
+                'schemeId', 'accountId'
             ]
 
             # Select the defined columns
@@ -98,10 +98,10 @@ def df_holidaysScheme3(endpoint3):
         return pd.DataFrame()  # Return an empty DataFrame if there's an error
 
 # Call df_holidaysSchemes function with the parameter endpoint1 to get holidaysSchemes data from JIRA API.
-holidaysScheme3_df = df_holidaysScheme3(endpoint3)
+holidaysSchemesMemb3_df = df_holidaysSchemesMemb3(endpoint3)
 
 # Getting and preparing dataframe
-def df_holidaysScheme4(endpoint4):
+def df_holidaysSchemesMemb4(endpoint4):
     api_url1 = f'https://api.tempo.io/4/{endpoint4}'
     
     response = requests.get(api_url1, headers=headers, params=params)
@@ -116,11 +116,11 @@ def df_holidaysScheme4(endpoint4):
                         
             print("Columns After Normalization:", list(df.columns))
             
-            df['schemaId'] = 4
+            df['schemeId'] = 4
 
             # Define the list of selected columns
             selected_columns = [
-                'schemaId', 'accountId'
+                'schemeId', 'accountId'
             ]
 
             # Select the defined columns
@@ -137,11 +137,10 @@ def df_holidaysScheme4(endpoint4):
         return pd.DataFrame()  # Return an empty DataFrame if there's an error
 
 # Call df_holidaysSchemes function with the parameter endpoint1 to get holidaysSchemes data from JIRA API.
-holidaysScheme4_df = df_holidaysScheme4(endpoint4)
+holidaysSchemesMemb4_df = df_holidaysSchemesMemb4(endpoint4)
 
-holidaysSchemes_df = pd.concat([holidaysScheme1_df, holidaysScheme3_df, holidaysScheme4_df], ignore_index=True)
-
-print(holidaysSchemes_df)
+# Concat all schemes and members
+holidaysSchemes_df = pd.concat([holidaysSchemesMemb1_df, holidaysSchemesMemb3_df, holidaysSchemesMemb4_df], ignore_index=True)
 
 # Connect to the SQLite database
 def setup_database():
@@ -150,9 +149,9 @@ def setup_database():
     Base = declarative_base()
     
     # Define the holidaysSchemes table
-    class holidaysSchemes(Base):
+    class holidaysSchemesMemb(Base):
         __tablename__ = 'holidaysSchemesMemb'
-        schemaId = Column(Integer, primary_key=True)
+        schemeId = Column(Integer, primary_key=True)
         accountId = Column(String(50))
 
 

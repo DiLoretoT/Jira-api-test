@@ -1,5 +1,5 @@
 requests
 sqlite3
 sqlalchemy
-pandas as pd
+pandas
 pytz

@@ -24,57 +24,76 @@ params = {
 # Getting and preparing dataframe
 def df_worklogs(endpoint):
     api_url = f'https://api.tempo.io/4/{endpoint}'
-    response = requests.get(api_url, headers=headers, params=params)
-    print(f'Status code: {response.status_code}')
+    # List to store all pages of worklogs
+    all_data = []  # List to store all pages of worklogs
+    next_url = api_url  # Start with the initial URL
+    local_params = params.copy()  # Copy initial params to modify for pagination
+
+    while next_url:
+        response = requests.get(next_url, headers=headers, params=local_params)
+        print(f'Status code: {response.status_code}, fetching: {next_url}')
+        
+        if response.status_code == 200:
+            data = response.json()
+            all_data.extend(data['results'])  # Add the results of the current page
+            
+            # Update next_url based on the presence of a 'next' link
+            next_url = data['metadata'].get('next')
+            local_params.clear()  # Clear params if all subsequent URLs contain full query parameters
+
+            # If 'next' contains a relative path, construct the next full URL (optional, based on API behavior)
+            # Example: next_url = f'{api_url}{next_url}' if next_url and not next_url.startswith('http') else next_url
+
+        else:
+            print(f"Failed to fetch worklogs: {response.status_code}")
+            return pd.DataFrame()  # Return an empty DataFrame if there's an error
     
-    if response.status_code == 200:
-        data = response.json()
-        
-        # Use json_normalize to handle nested JSON
-    if response.status_code == 200:
-        data = response.json()
-        
-        if 'results' in data and len(data['results']) > 0:
-            print("Original columns: ", list(data['results'][0].keys()))
-            df = pd.json_normalize(data, record_path=['results'], errors='ignore')
-            
-            # Initialize an empty list to store horario extendido values
-            horario_extendido_values = []
+    # Normalize the aggregated data from all pages
+    df = pd.json_normalize(all_data, errors='ignore')
+    print("Columns After Normalization:", list(df.columns))
+    
+    # Initialize an empty list to store 'Horario Extendido' values
+    horario_extendido_values = []
+    for result in all_data:
+        horario_extendido = False  # Default value if the attribute is not present
+        for attribute in result.get('attributes', {}).get('values', []):
+            if attribute.get('key') == '_HorarioExtendido_' and attribute.get('value') == 'true':
+                horario_extendido = True
+                break
+        horario_extendido_values.append(horario_extendido)
+    
+    # Add the 'Horario Extendido' values as a new column to the dataframe
+    df['Horario Extendido'] = horario_extendido_values
+    
+    # Define the list of selected columns
+    selected_columns = [
+        'tempoWorklogId', 'issue.id', 'author.accountId', 'timeSpentSeconds',
+        'billableSeconds', 'startDate', 'startTime', 'description',
+        'createdAt', 'updatedAt', 'Horario Extendido'
+    ]
 
-            # Loop through each result and extract the 'Horario Extendido' attribute if it exists
-            for result in data['results']:
-                horario_extendido = False  # Default value if the attribute is not present
-                for attribute in result['attributes']['values']:
-                    if attribute['key'] == '_HorarioExtendido_' and attribute['value'] == 'true':
-                        horario_extendido = True
-                        break
-                horario_extendido_values.append(horario_extendido)
-
-            # Add the 'Horario Extendido' values as a new column to the dataframe
-            df['Horario Extendido'] = horario_extendido_values
-            
-            print("Columns After Normalization:", list(df.columns))
-            
-            # Define the list of selected columns
-            selected_columns = [
-                'tempoWorklogId', 'issue.id', 'author.accountId', 'timeSpentSeconds',
-                'billableSeconds', 'startDate', 'startTime', 'description',
-                'createdAt', 'updatedAt', 'Horario Extendido'
-            ]
-
-            # Select the defined columns
-            df = df[selected_columns]
-            print("Selected columns: ", df.columns)
-            print(f"Found {len(df)} records")
-            return df
-            
-    else:
-        print(f"Failed to fetch users: {response.status_code}")
-        return pd.DataFrame()  # Return an empty DataFrame if there's an error
-
+    # Ensure only selected columns are included, if they exist in the dataframe
+    final_columns = [col for col in selected_columns if col in df.columns]
+    df = df[final_columns]
+    print("Selected columns: ", df.columns)
+    print(f"Found {len(df)} records")
+    return df
 
 # Call df_worklogs function with the parameter endpoint1 to get worklogs data from JIRA API.
 worklogs_df = df_worklogs(endpoint)
+print(type(worklogs_df))
+
+if worklogs_df is not None:
+    # Handle NaN values before casting
+    if worklogs_df['tempoWorklogId'].isnull().any():
+        # Choose a strategy to handle NaN values. For example, you can fill them with a placeholder:
+        worklogs_df['tempoWorklogId'].fillna(0, inplace=True)  # Or another value that makes sense for your context
+
+    # Now it's safe to cast the column to int
+    worklogs_df['tempoWorklogId'] = worklogs_df['tempoWorklogId'].astype(str)
+    worklogs_df['issue.id'] = worklogs_df['issue.id'].astype(str)
+else:
+    print("df_worklogs returned None.")
 
 # Convert 'timeSpentSeconds' to hours and drop the original column
 worklogs_df['timeSpentSeconds'] = (worklogs_df['timeSpentSeconds'] / 3600).round(2)
@@ -84,7 +103,7 @@ worklogs_df.rename(columns={'timeSpentSeconds': 'hours'}, inplace=True)
 worklogs_df['billableSeconds'] = (worklogs_df['billableSeconds'] / 3600).round(2)
 worklogs_df.rename(columns={'billableSeconds': 'billedHours'}, inplace=True)
 
-print(worklogs_df)
+print(worklogs_df.head(5))
 
 # Connect to the SQLite database
 def setup_database():
@@ -95,8 +114,8 @@ def setup_database():
     # Define the worklogs table
     class Worklogs(Base):
         __tablename__ = 'worklogs'
-        tempoWorklogId = Column(Integer, primary_key=True)
-        issueId = Column(String(40))
+        tempoWorklogId = Column(String, primary_key=True)
+        issueId = Column(String)
         userAccountId = Column(String(50))
         hours = Column(Integer)
         billedHours = Column(Integer)

@@ -60,7 +60,6 @@ def df_holidaysSchemes(endpoint):
 
 
 # Call df_holidaysSchemes function with the parameter endpoint1 to get holidaysSchemes data from JIRA API.
-
 holidaysSchemes_df = df_holidaysSchemes(endpoint1)
 
 # Connect to the SQLite database

@@ -22,16 +22,16 @@ def df_accountcategories(endpoint):
     if response.status_code == 200:
         data = response.json()
         
-        print("Original colums: ", list(data['results'][0].keys()))
+        #print("Original colums: ", list(data['results'][0].keys()))
         df = pd.json_normalize(data, record_path=['results'])
-        print("Columns After Normalization:", list(df.columns))
+        #print("Columns After Normalization:", list(df.columns))
 
         try:
             # Selecting columns
             selected_columns = ['id', 'name', 'type.name']
             df = df[selected_columns]
             
-            print("Columns after Filter and renaming: ", list(df.columns))
+            #print("Columns after Filter and renaming: ", list(df.columns))
             
         except KeyError as e:
             print(f"Column not found in the data: {e}")
@@ -46,7 +46,7 @@ def df_accountcategories(endpoint):
 # Call df_account-categories function with the parameter endpoint1 to get account-categories data from JIRA API.
 accountCategories_df = df_accountcategories(endpoint1)
 
-print(accountCategories_df)
+print(accountCategories_df.head())
 
 # Connect to the SQLite database
 def setup_database():

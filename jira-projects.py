@@ -29,7 +29,9 @@ params = {
 # Getting and preparing dataframe
 def df_projects(endpoint):
     api_url = f'https://algeiba.atlassian.net/rest/api/3/{endpoint}'
+    
     all_projects = []  # List to store all projects across pages
+    
     start_at = 0
     max_results = 200
     total = None
@@ -49,20 +51,17 @@ def df_projects(endpoint):
             print(f"Failed to fetch projects: {response.status_code}")
             return pd.DataFrame()  # Return an empty DataFrame if there's an error
 
-            
-            #
-            #return df
     
     # Create a DataFrame from the combined list of all projects
     df = pd.DataFrame(all_projects)
     df = df[['id', 'key', 'name']]
-    print("Columns After Normalization:", list(df.columns))
+    #print("Columns After Normalization:", list(df.columns))
     return df
 
 
 # Call df_projects function with the parameter endpoint to get projects data from JIRA API.
 projects_df = df_projects(endpoint)
-print(projects_df)
+print(projects_df.head())
 
 # Connect to the SQLite database
 def setup_database():
