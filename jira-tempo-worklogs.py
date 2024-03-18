@@ -114,8 +114,8 @@ def setup_database():
     # Define the worklogs table
     class Worklogs(Base):
         __tablename__ = 'worklogs'
-        tempoWorklogId = Column(String, primary_key=True)
-        issueId = Column(String)
+        tempoWorklogId = Column(Integer, primary_key=True)
+        issueId = Column(Integer)
         userAccountId = Column(String(50))
         hours = Column(Integer)
         billedHours = Column(Integer)

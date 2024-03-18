@@ -5,8 +5,9 @@ import sqlite3
 sheet_to_table = {
     'Sheet1': 'dias_habiles',
     'Sheet2': 'subteams',
-    'Sheet3': 'Cotización_USD'
+    'Sheet3': 'cotizacion_USD'
 }
+
 
 # Define the path to your Excel file
 excel_file_path = r'C:\Users\tdiloreto\Algeiba\InO Mgmt - Documents\Power BI Data input\ALG_Cuentas.xlsx'
@@ -23,12 +24,21 @@ for sheet_name in xls.sheet_names:
     # Skip the 'Horas Facturadas'
     if sheet_name == 'Horas Facturadas':
         continue
+    if sheet_name == 'Horas Facturadas':
+        continue
 
     # Read the sheet into a DataFrame
     df = pd.read_excel(xls, sheet_name=sheet_name)
 
     # Replace blank cells with None
     #df.fillna(value=None, inplace=True)
+    
+    # Connect to SQLite Database
+    conn = sqlite3.connect('jiradatabase.db')
+    cursor = conn.cursor()
+    cursor.execute("DROP TABLE IF EXISTS 'Horas Facturadas'")
+    cursor.execute("DROP TABLE IF EXISTS 'Horas Vendidas'")
+    conn.commit()
 
     # Rename the sheet to the corresponding table name and load it into SQLite
     table_name = sheet_to_table.get(sheet_name, sheet_name)  # Fallback to the original sheet name if not found in the dictionary
