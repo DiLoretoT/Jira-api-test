@@ -1,4 +1,5 @@
 import requests
+import logging
 import sqlalchemy
 import pandas as pd
 import base64
@@ -13,9 +14,10 @@ from sqlalchemy import text
 # AUTHENTICATION
 api_credentials = read_api_credentials("config.ini", "api_jira")
 api_token = api_credentials['token2']
+user_email = api_credentials['user_email']
 
 # Trying credentials 
-user_email = 'tdiloreto@algeiba.com'
+#user_email = 'tdiloreto@algeiba.com'
 credentials = f'{user_email}:{api_token}'
 encoded_credentials = base64.b64encode(credentials.encode('utf-8')).decode('utf-8')
 
@@ -32,12 +34,12 @@ encoded_credentials = base64.b64encode(credentials.encode('utf-8')).decode('utf-
 #    next_year = current_year
 
 # Calculate the date 90 days ago from the current date
-ninety_days_ago = datetime.now() - timedelta(days=90)
+ninety_days_ago = datetime.now() - timedelta(days=180)
 # Format the date in the format Jira expects (yyyy/mm/dd)
 ninety_days_ago_formatted = ninety_days_ago.strftime('%Y-%m-%d')
 print(ninety_days_ago_formatted)
 # Construct the JQL query to retrieve issues created in the last 90 days
-jql_query = f"created >= '{ninety_days_ago_formatted}'"
+jql_query = f"created >= '{ninety_days_ago_formatted}' ORDER BY created ASC"
 endpoint = 'search'
 
 headers = {
@@ -69,7 +71,7 @@ def df_issues(endpoint):
     while total is None or start_at < total:
         params['startAt'] = start_at
         response = requests.get(api_url, headers=headers, params=params)
-        print(f'Status code: {response.status_code}, {start_at}')
+        print(f'Status code: {response.status_code}, start at line: {start_at}')
 
         if response.status_code == 200:
             # Parse the JSON response
@@ -95,7 +97,7 @@ def df_issues(endpoint):
             if custom_field not in df_issues.columns:
                 df_issues[custom_field] = None # Create the column with None values
 
-        #print("Renaming columns...")      
+        print("Renaming columns...")      
         # Rename the columns for better readability
         df_issues.rename(columns={
             'fields.assignee.accountId': 'assigneeId',
@@ -120,14 +122,12 @@ def df_issues(endpoint):
             'fields.customfield_10056': 'EndDate',
             'fields.customfield_10215': 'FinalDate'
             
-                        
-            # Add more renames for custom fields as needed
         }, inplace=True)
 
         df_issues['TimeEstimate'] = (df_issues['TimeEstimate'] / 3600).round(2)
                 
         #print("Columns after process and rename: ", df_issues.columns)
-        #print("Selecting columns...")
+        print("Selecting columns...")
         selected_columns = ['id', 'key', 'summary', 'issueType', 'createdDate', 'updatedDate', 'resolutionDate', 'projectId','accountId', 'reporterId', 'assigneeId', 'statusDescription',
                             'GHZ Organization','GP Organization', 'Scania Activity Type', 'RZBT Activity Type','% Invoiced','% Advance', 'TimeEstimate', 'StartDate', 'EndDate', 'FinalDate']
 
@@ -149,6 +149,7 @@ def df_issues(endpoint):
     else:
         print("No issues fetched.")
         return pd.DataFrame()
+    
 
 # Call df_issues function with the parameter endpoint to get issues data from JIRA API.
 #print("Getting function up to work...")
@@ -168,32 +169,7 @@ def setup_database(engine, Base):
     engine = create_engine('sqlite:///jiradatabase.db')
     Base = declarative_base()
     
-    # # Define the issues table
-    # class Issues(Base):
-    #     __tablename__ = 'issues'
-    #     id = Column(Integer, primary_key=True)        
-    #     key = Column(String)
-    #     summary = Column(String)
-    #     issueType = Column(String)
-    #     createdDate = Column(DateTime)
-    #     updatedDate = Column(DateTime)
-    #     resolutionDate = Column(DateTime)
-    #     projectId = Column(Integer)
-    #     accountId = Column(Integer)
-    #     reporterId = Column(String)
-    #     assigneeId = Column(String)
-    #     statusDescription = Column(String)
-    #     GHZOrganization = Column(String)
-    #     GPOrganization = Column(String)
-    #     ScaniaActivityType = Column(String)
-    #     RZBTActivityType = Column(String)
-    #     InvoicedPercent = Column(Integer)
-    #     AdvancePercent = Column(Integer)
-    #     TimeEstimate = Column(Integer)
-    #     StartDate = Column(DateTime)
-    #     EndDate = Column(DateTime)
-    #     FinalDate = Column(DateTime)
-
+    # Define the stg_issues table
     class stg_issues(Base):
         __tablename__ = 'stg_issues'
         id = Column(Integer, primary_key=True)        
@@ -231,53 +207,62 @@ session = Session()
 
 
 # Load the data into the staging table
-issues_df.to_sql('stg_issues', engine, if_exists='replace', index=False)
+print("Loading Dataframe into 'stg_issues'...")
+try:
+    issues_df.to_sql('stg_issues', engine, if_exists='replace', index=False)
+    print("Dataframe successfully loaded into 'stg_issues'...")
+    
+except Exception as e: 
+    logging.info("Dataframe failed to be loaded into 'stg_issues: {e}'")
 
-sql_query_stg = text("""
-        INSERT INTO issues (id, key, summary, issueType, createdDate, updatedDate, resolutionDate, projectId, accountId, reporterId, assigneeId, statusDescription, "GHZ Organization", "GP Organization", "Scania Activity Type", "RZBT Activity Type", "% Invoiced", "% Advance", TimeEstimate, StartDate, EndDate, FinalDate)
-        SELECT id, key, summary, issueType, createdDate, updatedDate, resolutionDate, projectId, accountId, reporterId, assigneeId, statusDescription, "GHZ Organization", "GP Organization", "Scania Activity Type", "RZBT Activity Type", "% Invoiced", "% Advance", TimeEstimate, StartDate, EndDate, FinalDate
-        FROM stg_issues
-        WHERE id NOT IN (SELECT id FROM issues)
-        """
-)
-
-sql_query_issues = text("""
-            UPDATE issues
-            SET
-            key = (SELECT key FROM stg_issues WHERE stg_issues.id = issues.id AND stg_issues.updatedDate != issues.updatedDate),
-            summary = (SELECT summary FROM stg_issues WHERE stg_issues.id = issues.id AND stg_issues.updatedDate != issues.updatedDate),
-            issueType = (SELECT issueType FROM stg_issues WHERE stg_issues.id = issues.id AND stg_issues.updatedDate != issues.updatedDate),
-            createdDate = (SELECT createdDate FROM stg_issues WHERE stg_issues.id = issues.id AND stg_issues.updatedDate != issues.updatedDate),
-            updatedDate = (SELECT updatedDate FROM stg_issues WHERE stg_issues.id = issues.id AND stg_issues.updatedDate != issues.updatedDate),
-            resolutionDate = (SELECT resolutionDate FROM stg_issues WHERE stg_issues.id = issues.id AND stg_issues.updatedDate != issues.updatedDate),
-            projectId = (SELECT projectId FROM stg_issues WHERE stg_issues.id = issues.id AND stg_issues.updatedDate != issues.updatedDate),
-            accountId = (SELECT accountId FROM stg_issues WHERE stg_issues.id = issues.id AND stg_issues.updatedDate != issues.updatedDate),
-            reporterId = (SELECT reporterId FROM stg_issues WHERE stg_issues.id = issues.id AND stg_issues.updatedDate != issues.updatedDate),
-            assigneeId = (SELECT assigneeId FROM stg_issues WHERE stg_issues.id = issues.id AND stg_issues.updatedDate != issues.updatedDate),
-            statusDescription = (SELECT statusDescription FROM stg_issues WHERE stg_issues.id = issues.id AND stg_issues.updatedDate != issues.updatedDate),
-            "GHZ Organization" = (SELECT "GHZ Organization" FROM stg_issues WHERE stg_issues.id = issues.id AND stg_issues.updatedDate != issues.updatedDate),
-            "GP Organization" = (SELECT "GP Organization" FROM stg_issues WHERE stg_issues.id = issues.id AND stg_issues.updatedDate != issues.updatedDate),
-            "Scania Activity Type" = (SELECT "Scania Activity Type" FROM stg_issues WHERE stg_issues.id = issues.id AND stg_issues.updatedDate != issues.updatedDate),
-            "RZBT Activity Type" = (SELECT "RZBT Activity Type" FROM stg_issues WHERE stg_issues.id = issues.id AND stg_issues.updatedDate != issues.updatedDate),
-            "% Invoiced" = (SELECT "% Invoiced" FROM stg_issues WHERE stg_issues.id = issues.id AND stg_issues.updatedDate != issues.updatedDate),
-            "% Advance" = (SELECT "% Advance" FROM stg_issues WHERE stg_issues.id = issues.id AND stg_issues.updatedDate != issues.updatedDate),
-            TimeEstimate = (SELECT TimeEstimate FROM stg_issues WHERE stg_issues.id = issues.id AND stg_issues.updatedDate != issues.updatedDate),
-            StartDate = (SELECT StartDate FROM stg_issues WHERE stg_issues.id = issues.id AND stg_issues.updatedDate != issues.updatedDate),
-            EndDate = (SELECT EndDate FROM stg_issues WHERE stg_issues.id = issues.id AND stg_issues.updatedDate != issues.updatedDate),
-            FinalDate = (SELECT FinalDate FROM stg_issues WHERE stg_issues.id = issues.id AND stg_issues.updatedDate != issues.updatedDate)
-            WHERE EXISTS (
-            SELECT 1 FROM stg_issues WHERE stg_issues.id = issues.id AND stg_issues.updatedDate != issues.updatedDate
-            );
-        """
-)
-
-sql_query_drop = text("DROP TABLE IF EXISTS stg_issues")
 
 # Execute the upsert operation using raw SQL
-with engine.connect() as connection:
-    # Query to manage duplicates
-    connection.execute(sql_query_stg)
-    connection.execute(sql_query_issues)
-    connection.execute(sql_query_drop)
+with engine.begin() as connection:
+    
+    # Query to INSERT non-existing records from 'stg_issues' into 'issues'
+    print("Starting query to INSERT non-existing records from 'stg_issues' into 'issues'")
+    connection.execute(text("""
+    INSERT INTO issues (id, key, summary, issueType, createdDate, updatedDate, resolutionDate, projectId, accountId, reporterId, assigneeId, statusDescription, "GHZ Organization", "GP Organization", "Scania Activity Type", "RZBT Activity Type", "% Invoiced", "% Advance", TimeEstimate, StartDate, EndDate, FinalDate)
+    SELECT id, key, summary, issueType, createdDate, updatedDate, resolutionDate, projectId, accountId, reporterId, assigneeId, statusDescription, "GHZ Organization", "GP Organization", "Scania Activity Type", "RZBT Activity Type", "% Invoiced", "% Advance", TimeEstimate, StartDate, EndDate, FinalDate
+    FROM stg_issues
+    WHERE id NOT IN (SELECT id FROM issues)
+    """))
+    print("The query run successfully.")
+
+    # Query to UPDATE non-existing records from 'stg_issues' into 'issues'
+    print("Starting query to UPDATE non-existing records from 'stg_issues' into 'issues'")
+    connection.execute(text("""
+        UPDATE issues
+        SET
+        key = (SELECT key FROM stg_issues WHERE stg_issues.id = issues.id AND stg_issues.updatedDate != issues.updatedDate),
+        summary = (SELECT summary FROM stg_issues WHERE stg_issues.id = issues.id AND stg_issues.updatedDate != issues.updatedDate),
+        issueType = (SELECT issueType FROM stg_issues WHERE stg_issues.id = issues.id AND stg_issues.updatedDate != issues.updatedDate),
+        createdDate = (SELECT createdDate FROM stg_issues WHERE stg_issues.id = issues.id AND stg_issues.updatedDate != issues.updatedDate),
+        updatedDate = (SELECT updatedDate FROM stg_issues WHERE stg_issues.id = issues.id AND stg_issues.updatedDate != issues.updatedDate),
+        resolutionDate = (SELECT resolutionDate FROM stg_issues WHERE stg_issues.id = issues.id AND stg_issues.updatedDate != issues.updatedDate),
+        projectId = (SELECT projectId FROM stg_issues WHERE stg_issues.id = issues.id AND stg_issues.updatedDate != issues.updatedDate),
+        accountId = (SELECT accountId FROM stg_issues WHERE stg_issues.id = issues.id AND stg_issues.updatedDate != issues.updatedDate),
+        reporterId = (SELECT reporterId FROM stg_issues WHERE stg_issues.id = issues.id AND stg_issues.updatedDate != issues.updatedDate),
+        assigneeId = (SELECT assigneeId FROM stg_issues WHERE stg_issues.id = issues.id AND stg_issues.updatedDate != issues.updatedDate),
+        statusDescription = (SELECT statusDescription FROM stg_issues WHERE stg_issues.id = issues.id AND stg_issues.updatedDate != issues.updatedDate),
+        "GHZ Organization" = (SELECT "GHZ Organization" FROM stg_issues WHERE stg_issues.id = issues.id AND stg_issues.updatedDate != issues.updatedDate),
+        "GP Organization" = (SELECT "GP Organization" FROM stg_issues WHERE stg_issues.id = issues.id AND stg_issues.updatedDate != issues.updatedDate),
+        "Scania Activity Type" = (SELECT "Scania Activity Type" FROM stg_issues WHERE stg_issues.id = issues.id AND stg_issues.updatedDate != issues.updatedDate),
+        "RZBT Activity Type" = (SELECT "RZBT Activity Type" FROM stg_issues WHERE stg_issues.id = issues.id AND stg_issues.updatedDate != issues.updatedDate),
+        "% Invoiced" = (SELECT "% Invoiced" FROM stg_issues WHERE stg_issues.id = issues.id AND stg_issues.updatedDate != issues.updatedDate),
+        "% Advance" = (SELECT "% Advance" FROM stg_issues WHERE stg_issues.id = issues.id AND stg_issues.updatedDate != issues.updatedDate),
+        TimeEstimate = (SELECT TimeEstimate FROM stg_issues WHERE stg_issues.id = issues.id AND stg_issues.updatedDate != issues.updatedDate),
+        StartDate = (SELECT StartDate FROM stg_issues WHERE stg_issues.id = issues.id AND stg_issues.updatedDate != issues.updatedDate),
+        EndDate = (SELECT EndDate FROM stg_issues WHERE stg_issues.id = issues.id AND stg_issues.updatedDate != issues.updatedDate),
+        FinalDate = (SELECT FinalDate FROM stg_issues WHERE stg_issues.id = issues.id AND stg_issues.updatedDate != issues.updatedDate)
+        WHERE EXISTS (
+        SELECT 1 FROM stg_issues WHERE stg_issues.id = issues.id AND stg_issues.updatedDate != issues.updatedDate
+        );
+    """))
+    print("The query run successfully.")
+
+    print("Starting query to delete 'stg_issues' table.")
+    connection.execute(text("DROP TABLE IF EXISTS stg_issues"))
+    print("The query run successfully.")
 
 print("The issues table has been updated.")
