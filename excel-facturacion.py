@@ -1,26 +1,33 @@
 import pandas as pd
 import sqlite3
 from openpyxl import load_workbook
+from datetime import datetime, timedelta
+from dateutil.relativedelta import relativedelta
 
 # Define the path to your Excel file
 excel_file_path = r'C:\Users\tdiloreto\Algeiba\InO Billings - Documents\AIT_Billing_General_v2.xlsb.xlsx'
 
-# Load the workbook
-wb = load_workbook(excel_file_path, data_only=True)
-
 # Connect to SQLite Database
 conn = sqlite3.connect('jiradatabase.db')
 
-# Load named tables into SQLite
-for sheet in wb:
-        # Select sheet
-    if sheet == 'Fact_Facturacion':
-        for table in sheet.tables:
-            table_range = sheet.tables[table].ref
-            
-            data = pd.read_excel(excel_file_path, sheet_name='Fact_Facturacion', skiprows=11, engine='openpyxl')
-            data.dropna(how='all', inplace=True)
-            data.to_sql(table, conn, if_exists='replace', index=False)
+# Load the workbook
+wb = load_workbook(excel_file_path, data_only=True)
+
+# Load specific sheet into SQLite
+sheet_name = 'Fact_Facturacion'
+if sheet_name in wb.sheetnames:
+    # Load data from the Excel file into a DataFrame
+    data = pd.read_excel(excel_file_path, sheet_name=sheet_name, skiprows=11, engine='openpyxl')
+    data.dropna(how='all', inplace=True)
+    
+    # Correctly reference columns in 'data' DataFrame to convert them into datetime
+    date_columns = ['Fecha PF', 'Mes a facturar', 'Fecha Ren Tar', 'Fecha ren cont']
+    for col in date_columns:
+        if col in data.columns:
+            data[col] = pd.to_datetime(data[col]).dt.strftime('%Y-%m-%d')
+
+    # Write the DataFrame to the SQLite database, replacing the table if it exists
+    data.to_sql('fact_facturacion', conn, if_exists='replace', index=False)
 
 # Close the connection
 conn.close()

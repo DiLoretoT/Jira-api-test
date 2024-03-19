@@ -42,6 +42,7 @@ for sheet_name in xls.sheet_names:
 
     # Rename the sheet to the corresponding table name and load it into SQLite
     table_name = sheet_to_table.get(sheet_name, sheet_name)  # Fallback to the original sheet name if not found in the dictionary
+    #print(df.head())
     df.to_sql(table_name, conn, if_exists='replace', index=False)
 
 # Close the connection

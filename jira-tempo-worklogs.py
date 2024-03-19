@@ -46,7 +46,7 @@ five_months_ago_end = (datetime.now().replace(day=1) - relativedelta(months=4) -
 six_months_ago_start = (datetime.now().replace(day=1) - relativedelta(months=6)).strftime('%Y-%m-%d')
 six_months_ago_end = (datetime.now().replace(day=1) - relativedelta(months=5) - relativedelta(days=1)).strftime('%Y-%m-%d')
 
-print(f"Getting worklogs from {this_month_start} to {today}")
+print(f"Getting worklogs from {six_months_ago_start} to {today}")
 
 
 params = {
@@ -136,6 +136,10 @@ worklogs_df.rename(columns={'timeSpentSeconds': 'hours'}, inplace=True)
 # Convert 'billableSeconds' to hours and drop the original column
 worklogs_df['billableSeconds'] = (worklogs_df['billableSeconds'] / 3600).round(2)
 worklogs_df.rename(columns={'billableSeconds': 'billedHours'}, inplace=True)
+
+# Changin date format
+worklogs_df['createdAt'] = pd.to_datetime(worklogs_df['createdAt'])
+worklogs_df['updatedAt'] = pd.to_datetime(worklogs_df['updatedAt'])
 
 # Renaming
 worklogs_df.rename(columns={'issue.id': 'issueId'}, inplace=True)

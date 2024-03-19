@@ -4,12 +4,13 @@ import sqlalchemy
 import pandas as pd
 import base64
 from datetime import datetime, timedelta
+from dateutil.relativedelta import relativedelta
 from pathlib import Path
 from sqlalchemy import create_engine, Column, Integer, String, DateTime, text
 from sqlalchemy.orm import declarative_base
 from utils import read_api_credentials
 from sqlalchemy.orm import sessionmaker
-from dateutil.relativedelta import relativedelta
+
 
 # Configure logging at the start of your script
 logging.basicConfig(level=logging.INFO)
@@ -150,7 +151,12 @@ def df_issues(endpoint):
         }, inplace=True)
 
         df_issues['TimeEstimate'] = (df_issues['TimeEstimate'] / 3600).round(2)
-                
+        
+        df_issues['createdDate'] = pd.to_datetime(df_issues['createdDate']).dt.strftime('%Y-%m-%d')
+        df_issues['updatedDate'] = pd.to_datetime(df_issues['updatedDate']).dt.strftime('%Y-%m-%d')
+        df_issues['resolutionDate'] = pd.to_datetime(df_issues['resolutionDate']).apply(lambda x: x.strftime('%Y-%m-%d') if not pd.isnull(x) else x)
+
+
         #print("Columns after process and rename: ", df_issues.columns)
         #print("Selecting columns...")
         selected_columns = ['id', 'key', 'summary', 'issueType', 'createdDate', 'updatedDate', 'resolutionDate', 'projectId','accountId', 'reporterId', 'assigneeId', 'statusDescription',
