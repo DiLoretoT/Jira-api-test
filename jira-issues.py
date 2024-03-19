@@ -9,6 +9,7 @@ from sqlalchemy import create_engine, Column, Integer, String, DateTime, text
 from sqlalchemy.orm import declarative_base
 from utils import read_api_credentials
 from sqlalchemy.orm import sessionmaker
+from dateutil.relativedelta import relativedelta
 
 # Configure logging at the start of your script
 logging.basicConfig(level=logging.INFO)
@@ -35,13 +36,35 @@ encoded_credentials = base64.b64encode(credentials.encode('utf-8')).decode('utf-
 #    next_month = current_month + 1
 #    next_year = current_year
 
-# Calculate the date 90 days ago from the current date
-ninety_days_ago = datetime.now() - timedelta(days=18)
-# Format the date in the format Jira expects (yyyy/mm/dd)
-ninety_days_ago_formatted = ninety_days_ago.strftime('%Y-%m-%d')
-print(ninety_days_ago_formatted)
+# Current Date
+today = datetime.now().strftime('%Y-%m-%d')
+# X days ago (indicate how many)
+x_days_ago = (datetime.now() - timedelta(days=5)).strftime('%Y-%m-%d')
+# This Month (Starting from the first day of the current month)
+this_month_start = datetime.now().replace(day=1).strftime('%Y-%m-%d')
+# Last Month (First and Last Day)
+last_month_start = (datetime.now().replace(day=1) - relativedelta(months=1)).strftime('%Y-%m-%d')
+last_month_end = (datetime.now().replace(day=1) - relativedelta(days=1)).strftime('%Y-%m-%d')
+# More Months Ago: First Day and Last Day
+two_months_ago_start = (datetime.now().replace(day=1) - relativedelta(months=2)).strftime('%Y-%m-%d')
+two_months_ago_end = (datetime.now().replace(day=1) - relativedelta(months=1) - relativedelta(days=1)).strftime('%Y-%m-%d')
+
+three_months_ago_start = (datetime.now().replace(day=1) - relativedelta(months=3)).strftime('%Y-%m-%d')
+three_months_ago_end = (datetime.now().replace(day=1) - relativedelta(months=2) - relativedelta(days=1)).strftime('%Y-%m-%d')
+
+four_months_ago_start = (datetime.now().replace(day=1) - relativedelta(months=4)).strftime('%Y-%m-%d')
+four_months_ago_end = (datetime.now().replace(day=1) - relativedelta(months=3) - relativedelta(days=1)).strftime('%Y-%m-%d')
+
+five_months_ago_start = (datetime.now().replace(day=1) - relativedelta(months=5)).strftime('%Y-%m-%d')
+five_months_ago_end = (datetime.now().replace(day=1) - relativedelta(months=4) - relativedelta(days=1)).strftime('%Y-%m-%d')
+
+six_months_ago_start = (datetime.now().replace(day=1) - relativedelta(months=6)).strftime('%Y-%m-%d')
+six_months_ago_end = (datetime.now().replace(day=1) - relativedelta(months=5) - relativedelta(days=1)).strftime('%Y-%m-%d')
+
+print(f"Getting worklogs from {this_month_start} to {today}")
+
 # Construct the JQL query to retrieve issues created in the last 90 days
-jql_query = f"created >= '{ninety_days_ago_formatted}' ORDER BY created ASC"
+jql_query = f"created >= '{this_month_start}' ORDER BY created ASC"
 endpoint = 'search'
 
 headers = {
