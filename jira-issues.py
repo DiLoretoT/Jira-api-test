@@ -61,10 +61,10 @@ five_months_ago_end = (datetime.now().replace(day=1) - relativedelta(months=4) -
 six_months_ago_start = (datetime.now().replace(day=1) - relativedelta(months=6)).strftime('%Y-%m-%d')
 six_months_ago_end = (datetime.now().replace(day=1) - relativedelta(months=5) - relativedelta(days=1)).strftime('%Y-%m-%d')
 
-print(f"Getting worklogs from {this_month_start} to {today}")
+print(f"Getting worklogs from {six_months_ago_start} to {today}")
 
 # Construct the JQL query to retrieve issues created in the last 90 days
-jql_query = f"created >= '{this_month_start}' ORDER BY created ASC"
+jql_query = f"created >= '{six_months_ago_start}' ORDER BY created ASC"
 endpoint = 'search'
 
 headers = {
@@ -157,7 +157,7 @@ def df_issues(endpoint):
                             'GHZ Organization','GP Organization', 'Scania Activity Type', 'RZBT Activity Type','% Invoiced','% Advance', 'TimeEstimate', 'StartDate', 'EndDate', 'FinalDate']
 
         df_selected = df_issues[selected_columns]
-
+        
         #print("Columns after filter: ", df_selected.columns)
 
         #return df_selected
@@ -165,7 +165,9 @@ def df_issues(endpoint):
     #else:
     #    print(f"Failed to fetch issues: {response.status_code}")
     #    return pd.DataFrame()  # Return an empty DataFrame if there's an error
-        
+
+    print(f"Found {len(df_selected)} records")
+
     if all_issues:
         df_issues = pd.json_normalize(all_issues, errors='ignore')
         # The rest of your DataFrame processing code here
