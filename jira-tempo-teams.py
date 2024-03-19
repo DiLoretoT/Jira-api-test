@@ -72,12 +72,20 @@ for index, team in teams_df.iterrows():
             # Extract the member ID from each member detail
             member_id = member['member']['accountId']
             # Append a dict with team and member info to the list
+
+            active_membership = member['memberships'].get('active') if member['memberships'] else None
+            member_from = active_membership['from'] if active_membership else None
+            member_to = active_membership['to'] if active_membership else None
+
             teams_with_members.append({
                 'teamId': team_id,
                 'teamName': team_name,
                 'leadId': lead_id,
-                'memberId': member_id
+                'memberId': member_id,
+                'from': member_from,
+                'to': member_to
             })
+            
     else:
         print(f"Failed to fetch members for team {team_name}: {members_response.status_code}")
         
@@ -87,34 +95,6 @@ teams_members_df = pd.DataFrame(teams_with_members)
 print("Final Dataframe with Members (head):")
 print(teams_members_df.head())
 
-
-
-# # Initialize an empty list for project IDs
-# members_id = []
-# request_count = 0
-# print("Initializing loop to get project ID from endpoint /accounts/{ACCOUNT ID}/links...")
-# # Loop through each open account's link to fetch the project ID
-# for teamLink in teams_df['teamLink']:
-#     link_response = requests.get(teamLink, headers=headers)
-#     request_count += 1
-#     print(f"Iteration {request_count}: Status code {link_response.status_code}")
-#     link_data = link_response.json()
-    
-#     # Check if 'results' is not empty and contains 'scope' with type "PROJECT"
-#     if link_data['results'] and link_data['results'][0]['member']['accountId']:
-#         teams_id = link_data['results'][0]['member']['accountId']
-#         members_id.append(teams_id)
-#     else:
-#         members_id.append(None)  # Append None if no project ID is found or if the structure is unexpected
-
-# # Assuming accounts_df is a copy or you're okay modifying it directly
-# teams_df['teams_ids'] = members_id
-# # Optionally, drop the 'accountLink' column if it's no longer needed
-# print("Replacing columns...")
-# teams_df.drop(columns=['teamLink'], inplace=True)
-
-# print("Final Dataframe (head):")
-# print(teams_df.head())
 
 print("Initializing database creation...")
 # Connect to the SQLite database

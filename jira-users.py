@@ -51,7 +51,7 @@ def df_users(endpoint):
     # Create a DataFrame from the combined list of all users
     df = pd.DataFrame(all_users)
     # Create a DataFrame from the values
-    df = df[['accountId', 'active', 'accountType','displayName']]
+    df = df[['accountId', 'active', 'accountType','emailAddress','displayName']]
     #print("Columns After Normalization:", list(df.columns))
     return df
 
@@ -71,6 +71,7 @@ def setup_database():
         accountId = Column(String, primary_key=True)
         active = Column(String)
         accountType = Column(String)
+        emailAddress = Column(String)
         displayName = Column(String)
 
     Base.metadata.create_all(engine)
