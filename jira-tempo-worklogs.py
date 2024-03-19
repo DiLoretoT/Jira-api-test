@@ -1,10 +1,16 @@
 import requests
 import json
 import sqlalchemy
+import logging
 import pandas as pd
-from sqlalchemy import create_engine, Column, Integer, String, DateTime, Text
-from sqlalchemy.orm import declarative_base
+from datetime import datetime, timedelta
+from sqlalchemy import create_engine, Column, Integer, String, DateTime, Text, text
+from sqlalchemy.orm import declarative_base, sessionmaker
+from dateutil.relativedelta import relativedelta
 from utils import read_api_credentials, get_sqlite_db_connection, close_sqlite_db_connection
+
+# Configure logging at the start of your script
+logging.basicConfig(level=logging.INFO)
 
 # AUTHENTICATION
 api_credentials = read_api_credentials("config.ini", "api_tempo")
@@ -15,9 +21,37 @@ headers = {
     'Authorization': f'Bearer {api_token}'
 }
 
+# Current Date
+today = datetime.now().strftime('%Y-%m-%d')
+# X days ago (indicate how many)
+x_days_ago = (datetime.now() - timedelta(days=5)).strftime('%Y-%m-%d')
+# This Month (Starting from the first day of the current month)
+this_month_start = datetime.now().replace(day=1).strftime('%Y-%m-%d')
+# Last Month (First and Last Day)
+last_month_start = (datetime.now().replace(day=1) - relativedelta(months=1)).strftime('%Y-%m-%d')
+last_month_end = (datetime.now().replace(day=1) - relativedelta(days=1)).strftime('%Y-%m-%d')
+# More Months Ago: First Day and Last Day
+two_months_ago_start = (datetime.now().replace(day=1) - relativedelta(months=2)).strftime('%Y-%m-%d')
+two_months_ago_end = (datetime.now().replace(day=1) - relativedelta(months=1) - relativedelta(days=1)).strftime('%Y-%m-%d')
+
+three_months_ago_start = (datetime.now().replace(day=1) - relativedelta(months=3)).strftime('%Y-%m-%d')
+three_months_ago_end = (datetime.now().replace(day=1) - relativedelta(months=2) - relativedelta(days=1)).strftime('%Y-%m-%d')
+
+four_months_ago_start = (datetime.now().replace(day=1) - relativedelta(months=4)).strftime('%Y-%m-%d')
+four_months_ago_end = (datetime.now().replace(day=1) - relativedelta(months=3) - relativedelta(days=1)).strftime('%Y-%m-%d')
+
+five_months_ago_start = (datetime.now().replace(day=1) - relativedelta(months=5)).strftime('%Y-%m-%d')
+five_months_ago_end = (datetime.now().replace(day=1) - relativedelta(months=4) - relativedelta(days=1)).strftime('%Y-%m-%d')
+
+six_months_ago_start = (datetime.now().replace(day=1) - relativedelta(months=6)).strftime('%Y-%m-%d')
+six_months_ago_end = (datetime.now().replace(day=1) - relativedelta(months=5) - relativedelta(days=1)).strftime('%Y-%m-%d')
+
+print(f"Getting worklogs from {this_month_start} to {today}")
+
+
 params = {
-    'from': '2024-02-01',
-    'to': '2024-02-02',
+    'from': f"{six_months_ago_start}",
+    'to': f"{today}",
     'limit': 100,
 }
 
@@ -75,7 +109,7 @@ def df_worklogs(endpoint):
     # Ensure only selected columns are included, if they exist in the dataframe
     final_columns = [col for col in selected_columns if col in df.columns]
     df = df[final_columns]
-    print("Selected columns: ", df.columns)
+    #print("Selected columns: ", df.columns)
     print(f"Found {len(df)} records")
     return df
 
@@ -103,35 +137,93 @@ worklogs_df.rename(columns={'timeSpentSeconds': 'hours'}, inplace=True)
 worklogs_df['billableSeconds'] = (worklogs_df['billableSeconds'] / 3600).round(2)
 worklogs_df.rename(columns={'billableSeconds': 'billedHours'}, inplace=True)
 
+# Renaming
+worklogs_df.rename(columns={'issue.id': 'issueId'}, inplace=True)
+worklogs_df.rename(columns={'author.accountId': 'userAccountId'}, inplace=True)
+
 print(worklogs_df.head(5))
 
-# Connect to the SQLite database
+print("Connecting to the database...")
+
+Base = declarative_base()
+
+# Define the worklogs table
+class stg_worklogs(Base):
+    __tablename__ = 'stg_worklogs'
+    tempoWorklogId = Column(Integer, primary_key=True)
+    issueId = Column(Integer)
+    userAccountId = Column(String(50))
+    hours = Column(Integer)
+    billedHours = Column(Integer)
+    startDate = Column(DateTime)
+    startTime = Column(DateTime)
+    description = Column(Text)
+    createdAt = Column(DateTime)
+    updatedAt = Column(DateTime)
+
+# Set up the database and create tables
 def setup_database():
-    # Connection
     engine = create_engine('sqlite:///jiradatabase.db')
-    Base = declarative_base()
-    
-    # Define the worklogs table
-    class Worklogs(Base):
-        __tablename__ = 'worklogs'
-        tempoWorklogId = Column(Integer, primary_key=True)
-        issueId = Column(Integer)
-        userAccountId = Column(String(50))
-        hours = Column(Integer)
-        billedHours = Column(Integer)
-        startDate = Column(DateTime)
-        startTime = Column(DateTime)
-        description = Column(Text)
-        createdAt = Column(DateTime)
-        updatedAt = Column(DateTime)
-        
     Base.metadata.create_all(engine)
     return engine
-engine = setup_database()
 
-table_name = "worklogs"
+engine = create_engine('sqlite:///jiradatabase.db')
+Session = sessionmaker(bind=engine)
+session = Session()
 
-worklogs_df.to_sql(name='worklogs', con=engine, if_exists='replace', index=False)
+# Load the data into the staging table
+print("Loading Dataframe into 'stg_worklogs'...")
+try:
+    worklogs_df.to_sql(name='stg_worklogs', con=engine, if_exists='replace', index=False)
+    print("Dataframe successfully loaded into 'stg_worklogs'...")
 
-# DEBUG PRINT
-print(f"The DataFrame was successfully loaded into the table '{table_name}'.")
+except Exception as e:
+    logging.info("Dataframe failed to be loaded into 'stg_worklogs: {e}'")
+
+# Execute the upsert operation using raw SQL
+with engine.begin() as connection:
+    # Query to INSERT non-existing records from 'stg_worklogs' into 'worklogs'
+
+    # Execute the SQL statements to create the indexes
+    print("Creating indexes...")
+    connection.execute(text("""
+    CREATE INDEX IF NOT EXISTS idx_worklogs_tempoWorklogId_updatedAt ON worklogs(tempoWorklogId, updatedAt);
+    """))
+    connection.execute(text("""
+    CREATE INDEX IF NOT EXISTS idx_stg_worklogs_tempoWorklogId_updatedAt ON stg_worklogs(tempoWorklogId, updatedAt);
+    """))
+    print("Indexes created successfully.")
+
+    print("Starting query to INSERT non-existing records from 'stg_worklogs' into 'worklogs'")
+    connection.execute(text("""
+    INSERT INTO worklogs (tempoWorklogId, issueId, userAccountId, hours, billedHours, startDate, startTime, description, createdAt)
+    SELECT tempoWorklogId, issueId, userAccountId, hours, billedHours, startDate, startTime, description, createdAt
+    FROM stg_worklogs
+    WHERE tempoWorklogId NOT IN (SELECT tempoWorklogId FROM worklogs)
+    """))
+    print("The query run successfully.")
+
+    # Identify records that require updates
+    print("Starting query to UPDATE existing records from 'stg_worklogs' into 'worklogs'")
+    records_to_update = connection.execute(text("""
+        SELECT stg.tempoWorklogId, stg.issueId, stg.userAccountId, stg.hours, stg.billedHours, stg.startDate, stg.startTime, stg.description, stg.createdAt
+        FROM stg_worklogs stg
+        JOIN worklogs w ON stg.tempoWorklogId = w.tempoWorklogId
+        WHERE stg.updatedAt != w.updatedAt
+    """)).fetchall()
+
+    # Update identified records
+    for record in records_to_update:
+        connection.execute(text("""
+            UPDATE worklogs
+            SET issueId = ?, userAccountId = ?, hours = ?, billedHours = ?, startDate = ?, startTime = ?, description = ?, createdAt = ?
+            WHERE tempoWorklogId = ?
+        """), 
+        (record['issueId'], record['userAccountId'], record['hours'], record['billedHours'], record['startDate'], record['startTime'], record['description'], record['createdAt'], record['tempoWorklogId']))
+    print("The query run successfully.")
+
+    print("Starting query to delete 'stg_worklogs' table.")
+    connection.execute(text("DROP TABLE IF EXISTS stg_worklogs"))
+    print("The query run successfully.")
+
+print("The worklogs table has been updated.")

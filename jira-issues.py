@@ -5,11 +5,13 @@ import pandas as pd
 import base64
 from datetime import datetime, timedelta
 from pathlib import Path
-from sqlalchemy import create_engine, Column, Integer, String, DateTime
+from sqlalchemy import create_engine, Column, Integer, String, DateTime, text
 from sqlalchemy.orm import declarative_base
 from utils import read_api_credentials
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy import text
+
+# Configure logging at the start of your script
+logging.basicConfig(level=logging.INFO)
 
 # AUTHENTICATION
 api_credentials = read_api_credentials("config.ini", "api_jira")
@@ -34,7 +36,7 @@ encoded_credentials = base64.b64encode(credentials.encode('utf-8')).decode('utf-
 #    next_year = current_year
 
 # Calculate the date 90 days ago from the current date
-ninety_days_ago = datetime.now() - timedelta(days=180)
+ninety_days_ago = datetime.now() - timedelta(days=18)
 # Format the date in the format Jira expects (yyyy/mm/dd)
 ninety_days_ago_formatted = ninety_days_ago.strftime('%Y-%m-%d')
 print(ninety_days_ago_formatted)
@@ -97,7 +99,7 @@ def df_issues(endpoint):
             if custom_field not in df_issues.columns:
                 df_issues[custom_field] = None # Create the column with None values
 
-        print("Renaming columns...")      
+        #print("Renaming columns...")      
         # Rename the columns for better readability
         df_issues.rename(columns={
             'fields.assignee.accountId': 'assigneeId',
@@ -127,7 +129,7 @@ def df_issues(endpoint):
         df_issues['TimeEstimate'] = (df_issues['TimeEstimate'] / 3600).round(2)
                 
         #print("Columns after process and rename: ", df_issues.columns)
-        print("Selecting columns...")
+        #print("Selecting columns...")
         selected_columns = ['id', 'key', 'summary', 'issueType', 'createdDate', 'updatedDate', 'resolutionDate', 'projectId','accountId', 'reporterId', 'assigneeId', 'statusDescription',
                             'GHZ Organization','GP Organization', 'Scania Activity Type', 'RZBT Activity Type','% Invoiced','% Advance', 'TimeEstimate', 'StartDate', 'EndDate', 'FinalDate']
 
@@ -164,36 +166,31 @@ print("Connecting to the database...")
 
 Base = declarative_base()
 
-def setup_database(engine, Base):
-    # Connection
-    engine = create_engine('sqlite:///jiradatabase.db')
-    Base = declarative_base()
-    
-    # Define the stg_issues table
-    class stg_issues(Base):
-        __tablename__ = 'stg_issues'
-        id = Column(Integer, primary_key=True)        
-        key = Column(String)
-        summary = Column(String)
-        issueType = Column(String)
-        createdDate = Column(DateTime)
-        updatedDate = Column(DateTime)
-        resolutionDate = Column(DateTime)
-        projectId = Column(Integer)
-        accountId = Column(Integer)
-        reporterId = Column(String)
-        assigneeId = Column(String)
-        statusDescription = Column(String)
-        GHZOrganization = Column(String)
-        GPOrganization = Column(String)
-        ScaniaActivityType = Column(String)
-        RZBTActivityType = Column(String)
-        InvoicedPercent = Column(Integer)
-        AdvancePercent = Column(Integer)
-        TimeEstimate = Column(Integer)
-        StartDate = Column(DateTime)
-        EndDate = Column(DateTime)
-        FinalDate = Column(DateTime)
+# Define the stg_issues table
+class stg_issues(Base):
+    __tablename__ = 'stg_issues'
+    id = Column(Integer, primary_key=True)        
+    key = Column(String)
+    summary = Column(String)
+    issueType = Column(String)
+    createdDate = Column(DateTime)
+    updatedDate = Column(DateTime)
+    resolutionDate = Column(DateTime)
+    projectId = Column(Integer)
+    accountId = Column(Integer)
+    reporterId = Column(String)
+    assigneeId = Column(String)
+    statusDescription = Column(String)
+    GHZOrganization = Column(String)
+    GPOrganization = Column(String)
+    ScaniaActivityType = Column(String)
+    RZBTActivityType = Column(String)
+    InvoicedPercent = Column(Integer)
+    AdvancePercent = Column(Integer)
+    TimeEstimate = Column(Integer)
+    StartDate = Column(DateTime)
+    EndDate = Column(DateTime)
+    FinalDate = Column(DateTime)
 
 # Set up the database and create tables
 def setup_database():
@@ -205,7 +202,6 @@ engine = create_engine('sqlite:///jiradatabase.db')
 Session = sessionmaker(bind=engine)
 session = Session()
 
-
 # Load the data into the staging table
 print("Loading Dataframe into 'stg_issues'...")
 try:
@@ -215,10 +211,19 @@ try:
 except Exception as e: 
     logging.info("Dataframe failed to be loaded into 'stg_issues: {e}'")
 
-
 # Execute the upsert operation using raw SQL
 with engine.begin() as connection:
-    
+        
+    # Execute the SQL statements to create the indexes
+    print("Creating indexes...")
+    connection.execute(text("""
+    CREATE INDEX IF NOT EXISTS idx_issues_id_updatedDate ON issues(id, updatedDate);
+    """))
+    connection.execute(text("""
+    CREATE INDEX IF NOT EXISTS idx_stg_issues_id_updatedDate ON stg_issues(id, updatedDate);
+    """))
+    print("Indexes created successfully.")
+
     # Query to INSERT non-existing records from 'stg_issues' into 'issues'
     print("Starting query to INSERT non-existing records from 'stg_issues' into 'issues'")
     connection.execute(text("""
@@ -231,34 +236,33 @@ with engine.begin() as connection:
 
     # Query to UPDATE non-existing records from 'stg_issues' into 'issues'
     print("Starting query to UPDATE non-existing records from 'stg_issues' into 'issues'")
-    connection.execute(text("""
-        UPDATE issues
-        SET
-        key = (SELECT key FROM stg_issues WHERE stg_issues.id = issues.id AND stg_issues.updatedDate != issues.updatedDate),
-        summary = (SELECT summary FROM stg_issues WHERE stg_issues.id = issues.id AND stg_issues.updatedDate != issues.updatedDate),
-        issueType = (SELECT issueType FROM stg_issues WHERE stg_issues.id = issues.id AND stg_issues.updatedDate != issues.updatedDate),
-        createdDate = (SELECT createdDate FROM stg_issues WHERE stg_issues.id = issues.id AND stg_issues.updatedDate != issues.updatedDate),
-        updatedDate = (SELECT updatedDate FROM stg_issues WHERE stg_issues.id = issues.id AND stg_issues.updatedDate != issues.updatedDate),
-        resolutionDate = (SELECT resolutionDate FROM stg_issues WHERE stg_issues.id = issues.id AND stg_issues.updatedDate != issues.updatedDate),
-        projectId = (SELECT projectId FROM stg_issues WHERE stg_issues.id = issues.id AND stg_issues.updatedDate != issues.updatedDate),
-        accountId = (SELECT accountId FROM stg_issues WHERE stg_issues.id = issues.id AND stg_issues.updatedDate != issues.updatedDate),
-        reporterId = (SELECT reporterId FROM stg_issues WHERE stg_issues.id = issues.id AND stg_issues.updatedDate != issues.updatedDate),
-        assigneeId = (SELECT assigneeId FROM stg_issues WHERE stg_issues.id = issues.id AND stg_issues.updatedDate != issues.updatedDate),
-        statusDescription = (SELECT statusDescription FROM stg_issues WHERE stg_issues.id = issues.id AND stg_issues.updatedDate != issues.updatedDate),
-        "GHZ Organization" = (SELECT "GHZ Organization" FROM stg_issues WHERE stg_issues.id = issues.id AND stg_issues.updatedDate != issues.updatedDate),
-        "GP Organization" = (SELECT "GP Organization" FROM stg_issues WHERE stg_issues.id = issues.id AND stg_issues.updatedDate != issues.updatedDate),
-        "Scania Activity Type" = (SELECT "Scania Activity Type" FROM stg_issues WHERE stg_issues.id = issues.id AND stg_issues.updatedDate != issues.updatedDate),
-        "RZBT Activity Type" = (SELECT "RZBT Activity Type" FROM stg_issues WHERE stg_issues.id = issues.id AND stg_issues.updatedDate != issues.updatedDate),
-        "% Invoiced" = (SELECT "% Invoiced" FROM stg_issues WHERE stg_issues.id = issues.id AND stg_issues.updatedDate != issues.updatedDate),
-        "% Advance" = (SELECT "% Advance" FROM stg_issues WHERE stg_issues.id = issues.id AND stg_issues.updatedDate != issues.updatedDate),
-        TimeEstimate = (SELECT TimeEstimate FROM stg_issues WHERE stg_issues.id = issues.id AND stg_issues.updatedDate != issues.updatedDate),
-        StartDate = (SELECT StartDate FROM stg_issues WHERE stg_issues.id = issues.id AND stg_issues.updatedDate != issues.updatedDate),
-        EndDate = (SELECT EndDate FROM stg_issues WHERE stg_issues.id = issues.id AND stg_issues.updatedDate != issues.updatedDate),
-        FinalDate = (SELECT FinalDate FROM stg_issues WHERE stg_issues.id = issues.id AND stg_issues.updatedDate != issues.updatedDate)
-        WHERE EXISTS (
-        SELECT 1 FROM stg_issues WHERE stg_issues.id = issues.id AND stg_issues.updatedDate != issues.updatedDate
-        );
-    """))
+    # Identify records that require updates
+    records_to_update = connection.execute(text("""
+        SELECT stg.id AS "id", stg.key AS "key", stg.summary AS "summary", stg.issueType AS "issueType", 
+            stg.createdDate AS "createdDate", stg.updatedDate AS "updatedDate", stg.resolutionDate AS "resolutionDate", 
+            stg.projectId AS "projectId", stg.accountId AS "accountId", stg.reporterId AS "reporterId", 
+            stg.assigneeId AS "assigneeId", stg.statusDescription AS "statusDescription", 
+            stg."GHZ Organization" AS "GHZOrganization", stg."GP Organization" AS "GPOrganization", 
+            stg."Scania Activity Type" AS "ScaniaActivityType", stg."RZBT Activity Type" AS "RZBTActivityType", 
+            stg."% Invoiced" AS "InvoicedPercent", stg."% Advance" AS "AdvancePercent", 
+            stg.TimeEstimate AS "TimeEstimate", stg.StartDate AS "StartDate", stg.EndDate AS "EndDate", stg.FinalDate AS "FinalDate"
+        FROM stg_issues stg
+        JOIN issues i ON stg.id = i.id
+        WHERE stg.updatedDate != i.updatedDate
+    """)).mappings().fetchall()
+
+    # Update identified records
+    for record in records_to_update:
+        connection.execute(text("""
+            UPDATE issues
+            SET key = :key, summary = :summary, issueType = :issueType, createdDate = :createdDate, updatedDate = :updatedDate, 
+                resolutionDate = :resolutionDate, projectId = :projectId, accountId = :accountId, reporterId = :reporterId, 
+                assigneeId = :assigneeId, statusDescription = :statusDescription, "GHZ Organization" = :GHZOrganization, 
+                "GP Organization" = :GPOrganization, "Scania Activity Type" = :ScaniaActivityType, "RZBT Activity Type" = :RZBTActivityType, 
+                "% Invoiced" = :InvoicedPercent, "% Advance" = :AdvancePercent, TimeEstimate = :TimeEstimate, 
+                StartDate = :StartDate, EndDate = :EndDate, FinalDate = :FinalDate
+            WHERE id = :id
+        """), record)
     print("The query run successfully.")
 
     print("Starting query to delete 'stg_issues' table.")
